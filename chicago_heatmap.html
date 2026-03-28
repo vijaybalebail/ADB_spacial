@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Oracle Spatial · Chicago Restaurant Violations</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+<style>
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #f0f4f8;
+  --surface: #ffffff;
+  --s2:      #f8fafc;
+  --border:  #dde3ec;
+  --border2: #c8d2e0;
+  --accent:  #2563eb;
+  --a-lt:    #eff6ff;
+  --purple:  #7c3aed;
+  --p-lt:    #f5f3ff;
+  --green:   #059669;
+  --g-lt:    #ecfdf5;
+  --warn:    #d97706;
+  --w-lt:    #fffbeb;
+  --danger:  #dc2626;
+  --d-lt:    #fef2f2;
+  --text:    #1e293b;
+  --t2:      #475569;
+  --t3:      #94a3b8;
+  --oracle:  #c74634;
+  --code:    #1e1e2e;
+  --code-b:  #2d2d42;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── HEADER ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  height: 52px;
+  flex-shrink: 0;
+}
+.oracle-pill {
+  background: #fff0ee; border: 1px solid #f5c0b8; color: var(--oracle);
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  letter-spacing: .07em; padding: 3px 9px; border-radius: 4px;
+  text-transform: uppercase; white-space: nowrap;
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 0 2px var(--g-lt);
+  animation: blink 2s ease-in-out infinite; flex-shrink: 0;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+header h1 { font-size: 15px; font-weight: 700; flex: 1; }
+.chip {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px; letter-spacing: .03em; white-space: nowrap;
+}
+.ch-b { background: var(--a-lt); color: var(--accent); border: 1px solid #bfdbfe; }
+.ch-g { background: var(--g-lt); color: var(--green);  border: 1px solid #a7f3d0; }
+.ch-p { background: var(--p-lt); color: var(--purple); border: 1px solid #ddd6fe; }
+
+/* ── TAB BAR ── */
+.tab-bar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; padding: 0 20px; gap: 2px;
+  height: 46px; align-items: flex-end; flex-shrink: 0;
+}
+.tab-btn {
+  padding: 9px 16px 10px; border: none; border-bottom: 3px solid transparent;
+  background: none; cursor: pointer; font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 500; color: var(--t3);
+  transition: all .15s; display: flex; align-items: center; gap: 6px;
+  border-radius: 6px 6px 0 0; white-space: nowrap;
+}
+.tab-btn:hover  { color: var(--t2); background: var(--bg); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ── TAB CONTENT ── */
+.tab-content { flex: 1; overflow: hidden; display: none; }
+.tab-content.active { display: flex; }
+
+/* ══════════════════════════════════════
+   TAB 1 — HEAT MAP
+══════════════════════════════════════ */
+.sidebar {
+  width: 340px; background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden; flex-shrink: 0;
+}
+.sb-scroll { flex: 1; overflow-y: auto; }
+.sb-scroll::-webkit-scrollbar { width: 4px; }
+.sb-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.sec { padding: 13px 15px; border-bottom: 1px solid var(--border); }
+.sec-lbl {
+  font-size: 10px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--t3);
+  margin-bottom: 9px; display: flex; align-items: center; gap: 6px;
+}
+.sec-lbl::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Dark code block */
+.codeblk {
+  background: var(--code); border: 1px solid var(--code-b); border-radius: 6px;
+  padding: 10px 12px; font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; line-height: 1.8; color: #cdd6f4;
+}
+.kw  { color: #cba6f7; }
+.fn  { color: #89b4fa; }
+.str { color: #a6e3a1; }
+.cm  { color: #6c7086; font-style: italic; }
+
+/* Method cards */
+.mc { border-radius: 6px; padding: 9px 11px; margin-bottom: 7px; border: 1px solid; }
+.mc.best { background: var(--g-lt); border-color: #6ee7b7; }
+.mc.alt  { background: var(--s2);   border-color: var(--border); }
+.mc-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; margin-bottom: 3px; }
+.mc-body  { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--t2); line-height: 1.6; }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat {
+  background: var(--s2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 9px 11px; transition: border-color .15s, box-shadow .15s;
+}
+.stat:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--a-lt); }
+.stat-val { font-size: 22px; font-weight: 700; line-height: 1; }
+.stat-lbl { font-size: 10px; color: var(--t3); margin-top: 3px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Legend */
+.legend-bar {
+  height: 10px; border-radius: 4px; margin: 8px 0 4px;
+  background: linear-gradient(to right, #3b82f6 0%, #10b981 30%, #f59e0b 65%, #ef4444 100%);
+  border: 1px solid var(--border);
+}
+.legend-row { display: flex; justify-content: space-between; font-size: 9px; color: var(--t3); font-family: 'JetBrains Mono', monospace; }
+
+/* Controls */
+.ctrl-lbl { font-size: 10px; color: var(--t2); font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; margin-bottom: 4px; }
+.ctrl-lbl span { color: var(--accent); font-weight: 600; }
+input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; margin-bottom: 8px; }
+
+/* Table */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl thead th {
+  font-size: 9px; color: var(--t3); font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase; letter-spacing: .08em;
+  text-align: left; padding: 0 6px 6px; border-bottom: 1px solid var(--border);
+}
+.tbl tbody tr { cursor: pointer; transition: background .12s; }
+.tbl tbody tr:hover { background: #eff6ff; }
+.tbl tbody td { padding: 5px 6px; border-bottom: 1px solid var(--border); font-size: 11px; vertical-align: middle; }
+.pill { display: inline-block; padding: 2px 7px; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; }
+.p0 { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.p3 { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.p5 { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.p7 { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.p9 { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+/* ORDS button */
+.ords-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--accent); color: #fff; border: none;
+  padding: 9px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: background .15s; width: 100%;
+}
+.ords-btn:hover   { background: #1d4ed8; }
+.ords-btn.loading { background: var(--t3); cursor: wait; }
+.ords-btn.ok      { background: var(--green); }
+.ords-btn.err     { background: var(--danger); }
+.ords-out {
+  display: none; margin-top: 9px;
+  background: var(--code); border: 1px solid var(--code-b);
+  border-radius: 5px; padding: 9px 11px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #cdd6f4; line-height: 1.7; max-height: 180px; overflow-y: auto;
+}
+.ords-out.show { display: block; }
+
+/* Map container */
+#map { flex: 1; position: relative; }
+
+/* Leaflet popup */
+.leaflet-popup-content-wrapper {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.12);
+}
+.leaflet-popup-content { font-family: 'Inter', sans-serif; font-size: 13px; margin: 12px 16px; }
+.leaflet-popup-tip { background: var(--surface); }
+.pu-name  { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.pu-row   { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+.pu-k     { color: var(--t3); font-family: 'JetBrains Mono', monospace; }
+.pu-v     { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.pu-code  {
+  margin-top: 8px; padding: 7px 9px; background: var(--code);
+  border-radius: 5px; font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; color: #89b4fa; line-height: 1.7;
+}
+
+/* Query flash overlay */
+.q-flash {
+  position: absolute; bottom: 16px; right: 16px; z-index: 999;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 6px;
+  padding: 10px 14px; max-width: 300px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.8;
+  box-shadow: 0 4px 20px rgba(0,0,0,.1); pointer-events: none;
+  opacity: 0; transform: translateY(6px); transition: all .25s;
+}
+.q-flash.show { opacity: 1; transform: translateY(0); }
+.q-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 5px; }
+
+/* ══════════════════════════════════════
+   TAB 2 — TUTORIAL
+══════════════════════════════════════ */
+.tut-wrap { flex: 1; display: flex; overflow: hidden; }
+
+.step-nav {
+  width: 260px; background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto; flex-shrink: 0;
+}
+.step-nav::-webkit-scrollbar { width: 4px; }
+.step-nav::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.step-item {
+  padding: 11px 15px; border-bottom: 1px solid var(--border);
+  cursor: pointer; display: flex; gap: 10px;
+  align-items: flex-start; transition: background .12s;
+}
+.step-item:hover  { background: var(--bg); }
+.step-item.active { background: var(--a-lt); border-left: 3px solid var(--accent); }
+.s-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--border); color: var(--t3);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px; transition: background .15s, color .15s;
+}
+.step-item.active .s-num { background: var(--accent); color: #fff; }
+.step-item.done   .s-num { background: var(--green);  color: #fff; }
+.s-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.s-sub   { font-size: 10px; color: var(--t3); line-height: 1.4; }
+
+.tut-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.tut-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.tut-panel.active { display: flex; }
+
+.split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; min-height: 0; }
+
+.cpane {
+  background: var(--code); overflow-y: auto;
+  padding: 16px 18px; border-right: 1px solid var(--code-b);
+}
+.cpane::-webkit-scrollbar { width: 4px; }
+.cpane::-webkit-scrollbar-thumb { background: #313244; border-radius: 2px; }
+.c-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  color: #6c7086; text-transform: uppercase; letter-spacing: .1em;
+  margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.c-title::after { content: ''; flex: 1; height: 1px; background: #313244; }
+pre {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  line-height: 1.8; color: #cdd6f4; white-space: pre-wrap; word-break: break-word;
+}
+pre .kw  { color: #cba6f7; }
+pre .fn  { color: #89b4fa; }
+pre .str { color: #a6e3a1; }
+pre .cm  { color: #6c7086; font-style: italic; }
+pre .num { color: #fab387; }
+pre .tag { color: #f38ba8; }
+pre .hl  { display: block; background: rgba(137,180,250,.1); border-left: 2px solid #89b4fa; padding-left: 8px; margin-left: -10px; }
+
+.ppane { background: var(--s2); display: flex; flex-direction: column; overflow: hidden; }
+.p-hdr {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 9px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.p-title { font-size: 12px; font-weight: 600; flex: 1; }
+.pbody   { flex: 1; overflow: hidden; position: relative; }
+.mini-map { width: 100%; height: 100%; }
+
+.explain { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 16px; flex-shrink: 0; }
+.explain-title { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.explain p { font-size: 11px; color: var(--t2); line-height: 1.6; }
+.explain code {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  background: var(--a-lt); color: var(--accent); padding: 1px 4px; border-radius: 3px;
+}
+
+.tut-nav {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 9px 16px; display: flex; align-items: center;
+  justify-content: space-between; flex-shrink: 0;
+}
+.nav-btn {
+  background: var(--s2); border: 1px solid var(--border2); color: var(--text);
+  padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: 'Inter', sans-serif; transition: all .15s;
+}
+.nav-btn:hover    { background: var(--a-lt); border-color: var(--accent); color: var(--accent); }
+.nav-btn:disabled { opacity: .4; cursor: default; pointer-events: none; }
+.dots { display: flex; gap: 5px; align-items: center; }
+.dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--border2); cursor: pointer; transition: background .15s; }
+.dot.active { background: var(--accent); }
+.dot.done   { background: var(--green); }
+
+/* ══════════════════════════════════════
+   TAB 3 — AI
+══════════════════════════════════════ */
+.ai-scroll { flex: 1; overflow-y: auto; padding: 28px 32px; }
+.ai-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 22px; margin-bottom: 14px;
+  max-width: 860px;
+}
+.ai-hdr { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ai-icon {
+  width: 38px; height: 38px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.ai-card-title { font-size: 14px; font-weight: 700; }
+.ai-card-sub   { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.ai-card p     { font-size: 12px; color: var(--t2); line-height: 1.7; margin-bottom: 10px; }
+.ai-card p:last-child { margin-bottom: 0; }
+.ai-code {
+  background: var(--code); border-radius: 6px; padding: 10px 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #cdd6f4; line-height: 1.7; margin-top: 8px;
+}
+.flow-steps { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.flow-step  { display: flex; align-items: flex-start; gap: 10px; }
+.flow-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--a-lt); color: var(--accent);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.flow-text { font-size: 12px; color: var(--t2); line-height: 1.5; }
+.flow-text strong { color: var(--text); }
+.hl-box {
+  background: linear-gradient(135deg,#eff6ff,#f5f3ff);
+  border: 1px solid #c7d2fe; border-radius: 8px; padding: 14px 16px; margin-top: 12px;
+}
+.hl-box-title { font-size: 13px; font-weight: 700; color: var(--purple); margin-bottom: 6px; }
+.hl-box p { font-size: 12px; color: #4338ca; line-height: 1.6; margin: 0; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="oracle-pill">Oracle ADB 23ai</div>
+  <div class="live-dot"></div>
+  <div style="flex:1">
+    <h1>Chicago Restaurant Violations · Spatial Heat Map Demo</h1>
+  </div>
+  <span class="chip ch-b">SDO_GCDR.ELOC_GEOCODE_AS_GEOM</span>
+  <span class="chip ch-g">SDO_UTIL.GETVERTICES</span>
+  <span class="chip ch-p">SRID 4326 · ORDS</span>
+</header>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('heatmap',this)">🗺&nbsp; Heat Map</button>
+  <button class="tab-btn" onclick="switchTab('tutorial',this)">📖&nbsp; Tutorial: Address → Coords → Map</button>
+  <button class="tab-btn" onclick="switchTab('ai',this)">✨&nbsp; How AI Can Help</button>
+</div>
+
+<!-- ═══════════════════════════════════════
+     TAB 1 — HEAT MAP
+═══════════════════════════════════════ -->
+<div id="tab-heatmap" class="tab-content active">
+
+  <aside class="sidebar">
+    <div class="sb-scroll">
+
+      <!-- Live ORDS fetch -->
+      <div class="sec">
+        <div class="sec-lbl">Live ORDS Endpoint</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);word-break:break-all;margin-bottom:8px">GET /ords/sdo/heatmap/violations</div>
+        <button class="ords-btn" id="btn1" onclick="fetchLive()">
+          <span id="btn1-ico">⬇</span>
+          <span id="btn1-txt">Fetch Live Data from Oracle ORDS</span>
+        </button>
+        <div class="ords-out" id="out1"></div>
+      </div>
+
+      <!-- GETVERTICES SQL -->
+      <div class="sec">
+        <div class="sec-lbl">GETVERTICES — coord extraction</div>
+        <div class="codeblk"><span class="kw">SELECT</span> v.x <span class="kw">AS</span> longitude,
+       v.y <span class="kw">AS</span> latitude
+<span class="kw">FROM</span> restaurant_inspections r,
+<span class="fn">TABLE</span>(<span class="fn">SDO_UTIL.GETVERTICES</span>(r.location)) v
+<span class="kw">WHERE</span> r.location <span class="kw">IS NOT NULL</span>;
+<span class="cm">-- v.x=lng · v.y=lat · v.z=elev</span></div>
+      </div>
+
+      <!-- Three methods -->
+      <div class="sec">
+        <div class="sec-lbl">Three extraction methods</div>
+        <div class="mc best">
+          <div class="mc-title" style="color:var(--green)">✦ GETVERTICES — recommended</div>
+          <div class="mc-body">TABLE(SDO_UTIL.GETVERTICES(geom)) v<br/>v.x · v.y · v.z · works for ALL geometry types</div>
+        </div>
+        <div class="mc alt">
+          <div class="mc-title" style="color:var(--accent)">TO_GEOJSON + JSON_VALUE</div>
+          <div class="mc-body">JSON_VALUE(SDO_UTIL.TO_GEOJSON(loc),'$.coordinates[0]')</div>
+        </div>
+        <div class="mc alt">
+          <div class="mc-title" style="color:var(--warn)">SDO_MIN_MBR_ORDINATE</div>
+          <div class="mc-body">SDO_GEOM.SDO_MIN_MBR_ORDINATE(loc,1) → X(lng)</div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="sec">
+        <div class="sec-lbl">Dataset — SDO.RESTAURANT_INSPECTIONS</div>
+        <div class="stats-grid">
+          <div class="stat"><div class="stat-val" id="stat-count">20</div><div class="stat-lbl">Restaurants</div></div>
+          <div class="stat"><div class="stat-val" id="stat-total">74</div><div class="stat-lbl">Violations</div></div>
+          <div class="stat"><div class="stat-val" id="stat-avg">3.7</div><div class="stat-lbl">Avg / venue</div></div>
+          <div class="stat"><div class="stat-val" id="stat-max" style="color:var(--danger)">9</div><div class="stat-lbl">Max violations</div></div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="sec">
+        <div class="sec-lbl">Heat Intensity</div>
+        <div class="legend-bar"></div>
+        <div class="legend-row"><span>0</span><span>medium</span><span id="legend-max">9 violations</span></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="sec">
+        <div class="sec-lbl">Heat Map Controls</div>
+        <div class="ctrl-lbl">Radius <span id="rv">35px</span></div>
+        <input type="range" id="rsl" min="10" max="80" value="35" oninput="rebuildHeat(+this.value,null,null)"/>
+        <div class="ctrl-lbl">Blur <span id="bv">20px</span></div>
+        <input type="range" id="bsl" min="5" max="60" value="20" oninput="rebuildHeat(null,+this.value,null)"/>
+        <div class="ctrl-lbl">Max intensity <span id="mv">1.0</span></div>
+        <input type="range" id="msl" min="1" max="20" value="10" oninput="rebuildHeat(null,null,this.value/10)"/>
+      </div>
+
+      <!-- Table -->
+      <div class="sec">
+        <div class="sec-lbl">Inspection Records</div>
+        <table class="tbl">
+          <thead><tr><th>Restaurant</th><th>Violations</th><th>Coords</th></tr></thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- MAP -->
+  <div id="map">
+    <div class="q-flash" id="qflash">
+      <div class="q-lbl">▶ Oracle Spatial Query</div>
+      <span class="kw">WHERE</span> <span class="fn">SDO_WITHIN_DISTANCE</span>(<br/>
+      &nbsp;&nbsp;location, :point,<br/>
+      &nbsp;&nbsp;<span class="str">'distance=1000 unit=meter'</span><br/>
+      ) = <span class="str">'TRUE'</span>
+    </div>
+  </div>
+
+</div><!-- /tab-heatmap -->
+
+<!-- ═══════════════════════════════════════
+     TAB 2 — TUTORIAL
+═══════════════════════════════════════ -->
+<div id="tab-tutorial" class="tab-content">
+<div class="tut-wrap">
+
+  <!-- Step nav -->
+  <nav class="step-nav" id="snav">
+    <div class="step-item active" onclick="goStep(0)"><div class="s-num" id="sn0">1</div><div><div class="s-title">Start: Raw Addresses</div><div class="s-sub">Before geocoding — location IS NULL</div></div></div>
+    <div class="step-item" onclick="goStep(1)"><div class="s-num" id="sn1">2</div><div><div class="s-title">Geocode → SDO_GEOMETRY</div><div class="s-sub">SDO_GCDR package — not an API</div></div></div>
+    <div class="step-item" onclick="goStep(2)"><div class="s-num" id="sn2">3</div><div><div class="s-title">Extract Coordinates</div><div class="s-sub">GETVERTICES → v.x longitude, v.y latitude</div></div></div>
+    <div class="step-item" onclick="goStep(3)"><div class="s-num" id="sn3">4</div><div><div class="s-title">Fetch via ORDS REST</div><div class="s-sub">Live button — real Oracle ADB request</div></div></div>
+    <div class="step-item" onclick="goStep(4)"><div class="s-num" id="sn4">5</div><div><div class="s-title">Initialize Leaflet Map</div><div class="s-sub">L.map() · tileLayer() · setView()</div></div></div>
+    <div class="step-item" onclick="goStep(5)"><div class="s-num" id="sn5">6</div><div><div class="s-title">Circle Markers</div><div class="s-sub">L.circleMarker([v.y, v.x]) — lat first!</div></div></div>
+    <div class="step-item" onclick="goStep(6)"><div class="s-num" id="sn6">7</div><div><div class="s-title">Heat Intensity</div><div class="s-sub">Oracle analytic window → 0.0–1.0</div></div></div>
+    <div class="step-item" onclick="goStep(7)"><div class="s-num" id="sn7">8</div><div><div class="s-title">Full Heat Map</div><div class="s-sub">L.heatLayer([lat,lng,intensity]) complete</div></div></div>
+  </nav>
+
+  <div class="tut-main">
+
+  <!-- STEP 1 -->
+  <div class="tut-panel active" id="tp0">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">Oracle ADB — source table</div>
+<pre><span class="cm">-- The location column is NULL until geocoded</span>
+
+<span class="kw">CREATE TABLE</span> restaurant_inspections (
+    restaurant_name <span class="kw">VARCHAR2</span>(<span class="num">200</span>),
+    address         <span class="kw">VARCHAR2</span>(<span class="num">300</span>),
+    city            <span class="kw">VARCHAR2</span>(<span class="num">100</span>),
+    state           <span class="kw">VARCHAR2</span>(<span class="num">2</span>),
+    zip_code        <span class="kw">VARCHAR2</span>(<span class="num">10</span>),
+    violation_count <span class="kw">NUMBER</span>(<span class="num">3</span>),
+<span class="hl">    location  MDSYS.<span class="fn">SDO_GEOMETRY</span>  <span class="cm">-- ← spatial column</span></span>
+);
+
+<span class="cm">-- Initial state after INSERT:</span>
+<span class="kw">SELECT</span> restaurant_name, address, location
+<span class="kw">FROM</span>   restaurant_inspections;
+
+<span class="cm">-- RESTAURANT_NAME    ADDRESS              LOCATION
+-- Au Cheval          800 W Randolph St    (null)
+-- Green Street       112 N Green St       (null)
+-- Alinea             1723 N Halsted St    (null)</span></pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">The full pipeline</div></div>
+        <div class="pbody" style="padding:16px;overflow-y:auto">
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px 8px 0 0;border-bottom:none;display:flex;align-items:center;gap:12px"><span style="font-size:20px">🏢</span><div><div style="font-size:12px;font-weight:600">Raw Address Strings</div><div style="font-size:11px;color:var(--t3)">"800 W Randolph St, Chicago IL"</div></div></div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="align-self:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);background:var(--a-lt);border:1px solid #bfdbfe;padding:3px 10px;border-radius:4px">SDO_GCDR package → ELOC geocoder</div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:0;display:flex;align-items:center;gap:12px"><span style="font-size:20px">📍</span><div><div style="font-size:12px;font-weight:600">SDO_GEOMETRY Point</div><div style="font-size:11px;color:var(--t3)">SDO_POINT_TYPE(-87.646, 41.884, NULL)</div></div></div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="align-self:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);background:var(--g-lt);border:1px solid #a7f3d0;padding:3px 10px;border-radius:4px">SDO_UTIL.GETVERTICES → v.x, v.y</div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:0;display:flex;align-items:center;gap:12px"><span style="font-size:20px">📊</span><div><div style="font-size:12px;font-weight:600">Longitude + Latitude</div><div style="font-size:11px;color:var(--t3)">v.x = -87.646 · v.y = 41.884</div></div></div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="align-self:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--oracle);background:#fff0ee;border:1px solid #f5c0b8;padding:3px 10px;border-radius:4px">ORDS REST → browser JSON</div>
+            <div style="align-self:center;width:2px;height:18px;background:var(--border2)"></div>
+            <div style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:0 0 8px 8px;display:flex;align-items:center;gap:12px"><span style="font-size:20px">🗺</span><div><div style="font-size:12px;font-weight:600">Leaflet Heat Map</div><div style="font-size:11px;color:var(--t3)">L.heatLayer([lat, lng, intensity])</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">Where we start</div><p>The <code>location</code> column (<code>MDSYS.SDO_GEOMETRY</code>) is NULL until we geocode. This tutorial walks every step from raw address text to interactive heat map — using real Oracle ADB coordinates throughout.</p></div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="tut-panel" id="tp1">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">Oracle SQL — SDO_GCDR package</div>
+<pre><span class="cm">-- SDO_GCDR is an Oracle PL/SQL PACKAGE.
+-- It is NOT a REST API — you call it in SQL.
+-- On ADB it uses Oracle ELOC (HERE Maps)
+-- internally. No API key needed from you.</span>
+
+<span class="cm">-- Single address — JSON form (ADB 23ai):</span>
+<span class="hl"><span class="kw">SELECT</span> <span class="fn">SDO_GCDR.ELOC_GEOCODE_AS_GEOM</span>(
+  <span class="fn">JSON_OBJECT</span>(<span class="str">'address'</span> <span class="kw">VALUE</span>
+    <span class="str">'800 W Randolph St, Chicago IL'</span>)
+) <span class="kw">AS</span> location <span class="kw">FROM</span> dual;</span>
+
+<span class="cm">-- Returns: SDO_GEOMETRY(2001, 4326,
+--   SDO_POINT_TYPE(-87.64662, 41.88427, NULL),
+--   NULL, NULL)
+
+-- Update all rows in one statement:</span>
+<span class="hl"><span class="kw">UPDATE</span> restaurant_inspections
+<span class="kw">SET</span> location = <span class="fn">SDO_GCDR.ELOC_GEOCODE_AS_GEOM</span>(
+    address, city, state, zip_code, <span class="str">'US'</span>
+)
+<span class="kw">WHERE</span> location <span class="kw">IS NULL</span>;</span>
+<span class="cm">-- 20 rows updated. All geocoded.</span></pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">SDO_GEOMETRY anatomy</div></div>
+        <div class="pbody" style="padding:16px;overflow-y:auto">
+          <div style="background:var(--code);border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#cdd6f4;line-height:1.9;margin-bottom:12px">
+            SDO_GEOMETRY(<br/>
+            &nbsp;&nbsp;<span style="color:#fab387">2001</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#6c7086">-- 2D Point</span><br/>
+            &nbsp;&nbsp;<span style="color:#fab387">4326</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#6c7086">-- WGS84 SRID</span><br/>
+            &nbsp;&nbsp;SDO_POINT_TYPE(<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#a6e3a1">-87.64662</span>,&nbsp;&nbsp;&nbsp;<span style="color:#6c7086">-- X = longitude</span><br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#a6e3a1">&nbsp;41.88427</span>,&nbsp;&nbsp;&nbsp;<span style="color:#6c7086">-- Y = latitude</span><br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#6c7086">-- Z = elevation</span><br/>
+            &nbsp;&nbsp;), NULL, NULL<br/>
+            )
+          </div>
+          <div style="background:var(--w-lt);border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:600;color:var(--warn);margin-bottom:4px">⚠ SDO_GCDR is a package, not an API</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.6">It runs inside the database as a SQL function call. Your code never makes an HTTP call to a geocoding service — Oracle handles that internally via ELOC.</div>
+          </div>
+          <div style="background:var(--g-lt);border:1px solid #a7f3d0;border-radius:6px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:4px">✓ Included with Oracle ADB</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.6;font-family:'JetBrains Mono',monospace">SDO_GCDR package → built in<br/>ELOC / HERE geocoder → included<br/>No extra cost or license</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">A package, not an API</div><p><code>SDO_GCDR.ELOC_GEOCODE_AS_GEOM()</code> is called in a SQL <code>UPDATE</code> statement — no HTTP request from your code, no API key to manage. The result is stored directly as <code>SDO_GEOMETRY</code>. Oracle calls HERE Maps internally as part of the ELOC service included with ADB.</p></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="tut-panel" id="tp2">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">Oracle SQL — GETVERTICES</div>
+<pre><span class="cm">-- TABLE(SDO_UTIL.GETVERTICES(geom)) is a
+-- lateral join. For a Point: 1 row.
+-- For a Polygon: N rows (one per vertex).</span>
+
+<span class="cm">-- Single address:</span>
+<span class="hl"><span class="kw">SELECT</span> v.x <span class="kw">AS</span> longitude,
+       v.y <span class="kw">AS</span> latitude
+<span class="kw">FROM</span> (
+  <span class="kw">SELECT</span> <span class="fn">SDO_GCDR.ELOC_GEOCODE_AS_GEOM</span>(
+    <span class="fn">JSON_OBJECT</span>(<span class="str">'address'</span> <span class="kw">VALUE</span>
+      <span class="str">'800 W Randolph St, Chicago IL'</span>)
+  ) <span class="kw">AS</span> geom <span class="kw">FROM</span> dual
+) g,
+<span class="fn">TABLE</span>(<span class="fn">SDO_UTIL.GETVERTICES</span>(g.geom)) v;</span>
+
+<span class="cm">-- Result: -87.64662   41.88427
+
+-- From the full table:</span>
+<span class="kw">SELECT</span> r.restaurant_name,
+       v.x <span class="kw">AS</span> longitude,
+       v.y <span class="kw">AS</span> latitude,
+       r.violation_count
+<span class="kw">FROM</span>  restaurant_inspections r,
+<span class="fn">TABLE</span>(<span class="fn">SDO_UTIL.GETVERTICES</span>(r.location)) v
+<span class="kw">WHERE</span> r.location <span class="kw">IS NOT NULL</span>;</pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">Live ADB coordinates</div></div>
+        <div class="pbody" style="padding:14px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:10px">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="padding:6px 8px;text-align:left;color:var(--t3);font-size:9px">Restaurant</th>
+              <th style="padding:6px 8px;text-align:right;color:var(--accent);font-size:9px">v.x (lng)</th>
+              <th style="padding:6px 8px;text-align:right;color:var(--green);font-size:9px">v.y (lat)</th>
+              <th style="padding:6px 8px;text-align:right;color:var(--t3);font-size:9px">Viol.</th>
+            </tr></thead>
+            <tbody id="coords-tbl"></tbody>
+          </table>
+          <div style="margin-top:12px;background:var(--w-lt);border:1px solid #fde68a;border-radius:6px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:600;color:var(--warn);margin-bottom:4px">⚠ Coordinate order swap</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7;font-family:'JetBrains Mono',monospace">
+              Oracle: &nbsp;v.x = longitude, v.y = latitude<br/>
+              Leaflet: L.marker([<b>latitude, longitude</b>])<br/>
+              → Always: L.marker([<b>v.y</b>, <b>v.x</b>])
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">GETVERTICES — the preferred extraction method</div><p><code>TABLE(SDO_UTIL.GETVERTICES(geom))</code> works identically for Points (1 row), LineStrings, and Polygons (N rows). The coordinate swap — <code>[v.y, v.x]</code> for Leaflet — is the single most common mistake when connecting Oracle Spatial to web maps.</p></div>
+  </div>
+
+  <!-- STEP 4 — LIVE ORDS FETCH -->
+  <div class="tut-panel" id="tp3">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">ORDS REST — live Oracle ADB endpoint</div>
+<pre><span class="cm">-- ORDS is built into every ADB.
+-- One SQL block exposes any query as REST:</span>
+
+<span class="cm">-- AutoREST: same approach used by the CDC dashboard.
+-- One call per object — no module/template/handler needed.
+-- CORS is handled automatically by Oracle ADB.</span>
+
+<span class="cm">-- Run once as ADMIN or the schema user:</span>
+<span class="hl">BEGIN
+  ORDS.<span class="fn">ENABLE_OBJECT</span>(
+    p_enabled      =&gt; TRUE,
+    p_schema       =&gt; <span class="str">'SDO'</span>,
+    p_object       =&gt; <span class="str">'RESTAURANT_GEOJSON_V'</span>,
+    p_object_type  =&gt; <span class="str">'VIEW'</span>,
+    p_object_alias =&gt; <span class="str">'violations'</span>
+  );
+  COMMIT;
+END;</span>
+
+<span class="cm">-- That's it! The URL is now live:
+-- /ords/sdo/violations/
+-- Returns: { "items": [...], "hasMore": false, "count": 20 }
+
+-- JavaScript fetch — no mode, no proxy, no headers needed:</span>
+<span class="hl"><span class="kw">const</span> res  = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">'https://...oraclecloudapps.com/ords/sdo/violations/'</span>);
+<span class="kw">const</span> rows = (await res.<span class="fn">json</span>()).items;</span></pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">Try it — fetch live from Oracle ADB</div></div>
+        <div class="pbody" style="padding:16px;overflow-y:auto">
+          <p style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:12px">Click to make a real HTTP GET to your Oracle ADB instance in OCI Phoenix. Data comes directly from <code style="font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">SDO.RESTAURANT_GEOJSON_V</code>.</p>
+          <button class="ords-btn" id="btn2" onclick="fetchTutorial()">
+            <span id="btn2-ico">⬇</span>
+            <span id="btn2-txt">Fetch from Oracle ORDS — Live</span>
+          </button>
+          <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);word-break:break-all">
+            <span style="color:var(--green)">GET</span> https://bk8uwrvkgqzvi2h-vbjson.adb.us-phoenix-1.oraclecloudapps.com/ords/sdo/violations/<br/>
+            <span style="color:var(--t3)">Auto-REST · no manual module · same pattern as CDC project</span>
+          </div>
+          <div id="out2" style="display:none;margin-top:12px">
+            <div id="out2-status" style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:8px"></div>
+            <div id="out2-data" style="background:var(--code);border-radius:6px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#cdd6f4;line-height:1.8;max-height:220px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">ORDS — zero-infrastructure REST</div><p>No separate server, no config file, no deployment pipeline. <code>ORDS.DEFINE_HANDLER()</code> turns any SQL query into a REST endpoint. The response is standard JSON wrapped in <code>{"items":[...]}</code>. CORS is enabled with <code>ORDS.SET_MODULE_ORIGINS_ALLOWED('heatmap','*')</code> — already done in your ADB.</p></div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="tut-panel" id="tp4">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">JavaScript — L.map() + L.tileLayer()</div>
+<pre><span class="cm">// Include in &lt;head&gt;:</span>
+<span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="val">"stylesheet"</span> <span class="attr">href</span>=<span class="val">"leaflet.css"</span><span class="tag">/&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="val">"leaflet.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+<span class="tag">&lt;style&gt;</span> #map { height: 500px; } <span class="tag">&lt;/style&gt;</span>
+<span class="tag">&lt;div</span> <span class="attr">id</span>=<span class="val">"map"</span><span class="tag">&gt;&lt;/div&gt;</span>
+
+<span class="cm">// Initialize map — [lat, lng] ← lat FIRST</span>
+<span class="hl"><span class="kw">const</span> map = <span class="fn">L.map</span>(<span class="str">'map'</span>)
+  .<span class="fn">setView</span>([<span class="num">41.9003</span>, <span class="num">-87.6534</span>], <span class="num">13</span>);</span>
+
+<span class="cm">// [41.9003, -87.6534] = [v.y, v.x] from Oracle
+
+// Tile layer — free, no API key</span>
+<span class="hl"><span class="fn">L.tileLayer</span>(
+  <span class="str">'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'</span>,
+  { attribution: <span class="str">'© CartoDB'</span>, maxZoom: <span class="num">19</span> }
+).<span class="fn">addTo</span>(map);</span>
+
+<span class="cm">// {z}/{x}/{y} = zoom/col/row tiles
+// Leaflet calculates these automatically</span></pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">Live map — tiles loaded</div></div>
+        <div class="pbody"><div id="tm5" class="mini-map"></div></div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">L.map() — lat first, always</div><p>Leaflet takes <code>[latitude, longitude]</code> — opposite to Oracle's <code>SDO_POINT_TYPE(longitude, latitude)</code>. So <code>setView([v.y, v.x])</code>. The map div <em>must</em> have an explicit CSS height — a block element defaults to <code>height:0</code> and Leaflet renders nothing.</p></div>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="tut-panel" id="tp5">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">JavaScript — L.circleMarker()</div>
+<pre><span class="cm">// rows = (await fetch(ORDS_URL)).json().items
+// Each row: { latitude, longitude, violation_count }</span>
+
+<span class="kw">function</span> <span class="fn">color</span>(v) {
+  <span class="kw">return</span> v&gt;=<span class="num">7</span> ? <span class="str">'#dc2626'</span>  <span class="cm">// red</span>
+       : v&gt;=<span class="num">5</span> ? <span class="str">'#d97706'</span>  <span class="cm">// amber</span>
+       : v&gt;=<span class="num">3</span> ? <span class="str">'#059669'</span>  <span class="cm">// green</span>
+       :         <span class="str">'#2563eb'</span>; <span class="cm">// blue</span>
+}
+
+rows.<span class="fn">forEach</span>(r => {
+<span class="hl">  <span class="fn">L.circleMarker</span>(
+    [r.latitude, r.longitude], <span class="cm">// [v.y, v.x]!</span>
+    { radius:      <span class="num">4</span> + r.violation_count * <span class="num">1.2</span>,
+      fillColor:   <span class="fn">color</span>(r.violation_count),
+      color:       <span class="str">'white'</span>,
+      weight:      <span class="num">1.5</span>,
+      fillOpacity: <span class="num">0.85</span> }
+  )
+  .<span class="fn">bindPopup</span>(`&lt;b&gt;${r.restaurant_name}&lt;/b&gt;
+    &lt;br/&gt;${r.violation_count} violations`)
+  .<span class="fn">addTo</span>(map);</span>
+});</pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">Circle markers — click any point</div></div>
+        <div class="pbody"><div id="tm6" class="mini-map"></div></div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">circleMarker — pixel radius, constant at any zoom</div><p><code>L.circleMarker()</code> radius is in pixels — stays constant as you zoom, ideal for data viz. <code>L.circle()</code> radius is in metres — scales with zoom, ideal for showing a spatial query radius like <code>SDO_WITHIN_DISTANCE</code>. Notice the ORDS response already has <code>latitude</code> and <code>longitude</code> as column names from the view's <code>GETVERTICES</code> extraction.</p></div>
+  </div>
+
+  <!-- STEP 7 -->
+  <div class="tut-panel" id="tp6">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">Oracle SQL — heat_intensity analytic</div>
+<pre><span class="cm">-- Oracle computes 0.0–1.0 intensity in the VIEW.
+-- No JavaScript math needed.</span>
+
+<span class="cm">-- Inside restaurant_geojson_v:</span>
+<span class="hl"><span class="kw">ROUND</span>(
+  r.violation_count /
+  <span class="fn">NULLIF</span>(<span class="fn">MAX</span>(r.violation_count) <span class="kw">OVER</span>(), <span class="num">0</span>),
+  <span class="num">4</span>
+) <span class="kw">AS</span> heat_intensity</span>
+
+<span class="cm">-- OVER() = window = entire result set
+-- MAX(violation_count) OVER() = 9
+
+-- Results from your ADB:
+-- Au Cheval       9  → 1.0000
+-- Green Street    8  → 0.8889
+-- Kumas Corner    7  → 0.7778
+-- Blackbird       6  → 0.6667
+-- ...
+-- Alinea          0  → 0.0000
+
+-- JavaScript just reads the column:</span>
+<span class="hl">rows.<span class="fn">map</span>(r => [r.latitude, r.longitude, r.heat_intensity])</span></pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">heat_intensity — all 20 rows</div></div>
+        <div class="pbody" style="padding:14px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:10px">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="padding:5px 8px;text-align:left;color:var(--t3);font-size:9px">Restaurant</th>
+              <th style="padding:5px 8px;text-align:right;color:var(--t3);font-size:9px">Violations</th>
+              <th style="padding:5px 8px;text-align:right;color:var(--t3);font-size:9px">Intensity</th>
+              <th style="padding:5px 8px;color:var(--t3);font-size:9px">Bar</th>
+            </tr></thead>
+            <tbody id="intensity-tbl"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">Compute in Oracle, not JavaScript</div><p>The analytic expression <code>MAX(violation_count) OVER ()</code> runs in one SQL pass across the full result set. The normalised value arrives in every ORDS row — JavaScript reads <code>r.heat_intensity</code> directly with zero extra computation.</p></div>
+  </div>
+
+  <!-- STEP 8 -->
+  <div class="tut-panel" id="tp7">
+    <div class="split">
+      <div class="cpane">
+        <div class="c-title">JavaScript — complete pipeline</div>
+<pre><span class="kw">const</span> ORDS = <span class="str">'https://bk8uwrvkgqzvi2h-vbjson.adb'</span>+
+             <span class="str">'.us-phoenix-1.oraclecloudapps.com'</span>+
+             <span class="str">'/ords/sdo/heatmap/violations'</span>;
+
+<span class="kw">async function</span> <span class="fn">buildMap</span>() {
+
+  <span class="cm">// 1. Fetch live from Oracle ORDS</span>
+<span class="hl">  <span class="kw">const</span> rows = (await (await <span class="fn">fetch</span>(ORDS)).<span class="fn">json</span>()).items;</span>
+
+  <span class="cm">// 2. Leaflet map</span>
+  <span class="kw">const</span> map = <span class="fn">L.map</span>(<span class="str">'map'</span>).<span class="fn">setView</span>([<span class="num">41.9</span>,<span class="num">-87.65</span>],<span class="num">13</span>);
+  <span class="fn">L.tileLayer</span>(<span class="str">'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'</span>,
+    {attribution:<span class="str">'© CartoDB'</span>}).<span class="fn">addTo</span>(map);
+
+  <span class="cm">// 3. Heat layer — Oracle intensity direct</span>
+<span class="hl">  <span class="fn">L.heatLayer</span>(
+    rows.<span class="fn">map</span>(r=>[r.latitude, r.longitude, r.heat_intensity]),
+    { radius:<span class="num">35</span>, blur:<span class="num">20</span>, max:<span class="num">1.0</span>,
+      gradient:{<span class="num">0</span>:<span class="str">'#3b82f6'</span>,<span class="num">0.5</span>:<span class="str">'#f59e0b'</span>,<span class="num">1</span>:<span class="str">'#ef4444'</span>} }
+  ).<span class="fn">addTo</span>(map);</span>
+
+  <span class="cm">// 4. Circle markers</span>
+  rows.<span class="fn">forEach</span>(r =>
+    <span class="fn">L.circleMarker</span>([r.latitude, r.longitude],
+      {radius:<span class="num">4</span>+r.violation_count*<span class="num">1.1</span>,
+       fillColor:r.violation_count&gt;<span class="num">6</span>?<span class="str">'#dc2626'</span>:<span class="str">'#2563eb'</span>,
+       color:<span class="str">'white'</span>,weight:<span class="num">1.5</span>,fillOpacity:<span class="num">0.85</span>})
+    .<span class="fn">bindPopup</span>(`&lt;b&gt;${r.restaurant_name}&lt;/b&gt;&lt;br/&gt;${r.violation_count} violations`)
+    .<span class="fn">addTo</span>(map)
+  );
+}
+<span class="fn">buildMap</span>();</pre>
+      </div>
+      <div class="ppane">
+        <div class="p-hdr"><div class="p-title">Complete heat map — click any marker</div></div>
+        <div class="pbody"><div id="tm8" class="mini-map"></div></div>
+      </div>
+    </div>
+    <div class="explain"><div class="explain-title">The whole pipeline in 20 lines</div><p>Oracle geocoded the addresses → stored <code>SDO_GEOMETRY</code> → <code>GETVERTICES</code> extracted coordinates → the view normalised intensity with <code>MAX() OVER()</code> → ORDS served JSON → JavaScript mapped <code>[r.latitude, r.longitude, r.heat_intensity]</code> into <code>L.heatLayer()</code>. Every hard part happened in Oracle SQL.</p></div>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="tut-nav">
+    <button class="nav-btn" id="prev-btn" onclick="prevStep()" disabled>← Previous</button>
+    <div class="dots" id="step-dots"></div>
+    <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+  </div>
+
+  </div><!-- /tut-main -->
+</div><!-- /tut-wrap -->
+</div><!-- /tab-tutorial -->
+
+<!-- ═══════════════════════════════════════
+     TAB 3 — HOW AI CAN HELP
+═══════════════════════════════════════ -->
+<div id="tab-ai" class="tab-content">
+<div class="ai-scroll">
+<div style="max-width:860px;margin:0 auto;padding-bottom:40px">
+
+  <!-- BLOG HEADER -->
+  <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid var(--border)">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <span style="background:var(--oracle-pill, #fff0ee);border:1px solid #f5c0b8;color:var(--oracle);padding:2px 8px;border-radius:4px;font-weight:600">ORACLE SPATIAL</span>
+      <span>March 2026</span>
+      <span>·</span>
+      <span>Oracle ADB 23ai</span>
+    </div>
+    <h1 style="font-size:26px;font-weight:700;line-height:1.3;margin-bottom:10px">From Address to Heat Map:<br/>Oracle ADB Now Geocodes Inside the Database</h1>
+    <p style="font-size:14px;color:var(--t2);line-height:1.7;max-width:700px">Since 2023, Oracle Autonomous Database 23ai includes a built-in geocoder. One SQL call converts a plain text address into a precise geographic coordinate stored as <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--a-lt);color:var(--accent);padding:1px 5px;border-radius:3px">MDSYS.SDO_GEOMETRY</code> — no external API, no key management, no extra cost. This post shows the complete pipeline from that single SQL call to a live interactive heat map.</p>
+  </div>
+
+  <!-- SECTION 1: THE GEOCODER -->
+  <div class="ai-card" style="border-left:4px solid var(--accent)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--a-lt);border:1px solid #bfdbfe">📍</div>
+      <div>
+        <div class="ai-card-title">The Geocoder — One SQL Call, Full Coordinates</div>
+        <div class="ai-card-sub">SDO_GCDR.ELOC_GEOCODE_AS_GEOM() · Available on Oracle ADB 23ai · Powered by HERE Maps</div>
+      </div>
+    </div>
+    <p>Before 2023, geocoding in Oracle required a separately licensed on-premises geocoder or an external API call from your application. Since ADB 23ai, it is a single SQL function call that runs entirely inside the database. Oracle handles the call to HERE Maps internally — your code never touches an HTTP endpoint.</p>
+    <div class="ai-code"><span style="color:#6c7086">-- Convert any address to longitude + latitude in one statement</span>
+<span style="color:#cba6f7">SELECT</span> v.x <span style="color:#cba6f7">AS</span> longitude,
+       v.y <span style="color:#cba6f7">AS</span> latitude
+<span style="color:#cba6f7">FROM</span> (
+    <span style="color:#cba6f7">SELECT</span> <span style="color:#89b4fa">SDO_GCDR.ELOC_GEOCODE_AS_GEOM</span>(
+        <span style="color:#89b4fa">JSON_OBJECT</span>(<span style="color:#a6e3a1">'address'</span> <span style="color:#cba6f7">VALUE</span>
+            <span style="color:#a6e3a1">'1600 Amphitheatre Parkway, Mountain View, CA'</span>)
+    ) <span style="color:#cba6f7">AS</span> geom <span style="color:#cba6f7">FROM</span> dual
+) g,
+<span style="color:#89b4fa">TABLE</span>(<span style="color:#89b4fa">SDO_UTIL.GETVERTICES</span>(g.geom)) v;
+
+<span style="color:#6c7086">-- Result: LONGITUDE=-122.0839  LATITUDE=37.42305
+-- Stored as: SDO_GEOMETRY(2001, 4326, SDO_POINT_TYPE(-122.0839, 37.42305, NULL))</span></div>
+    <p style="margin-top:12px">The result is an <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">SDO_GEOMETRY</code> point with SRID 4326 (WGS84 — the same coordinate system used by GPS, Google Maps, and Leaflet). <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--g-lt);color:var(--green);padding:1px 4px;border-radius:3px">SDO_UTIL.GETVERTICES()</code> is the lateral join that unpacks it: <strong>v.x = longitude, v.y = latitude</strong>. It works identically for Points, Lines, and Polygons — making it the preferred extraction method.</p>
+    <div style="background:var(--w-lt);border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin-top:10px">
+      <strong style="font-size:12px;color:var(--warn)">⚠ Important: SDO_GCDR is a PL/SQL package, not a REST API.</strong>
+      <p style="font-size:12px;color:var(--t2);margin:4px 0 0;line-height:1.6">You call it in a SQL <code style="font-family:'JetBrains Mono',monospace;font-size:10px">UPDATE</code> or <code style="font-family:'JetBrains Mono',monospace;font-size:10px">SELECT</code> statement. There is no HTTP call from your application code, no API key to rotate, and no per-call billing beyond your ADB subscription.</p>
+    </div>
+  </div>
+
+  <!-- SECTION 2: SDO TO MAP -->
+  <div class="ai-card" style="border-left:4px solid var(--green)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--g-lt);border:1px solid #a7f3d0">🗺</div>
+      <div>
+        <div class="ai-card-title">From SDO_GEOMETRY to a Web Map</div>
+        <div class="ai-card-sub">Oracle Spatial Studio · Leaflet.js · Any map provider</div>
+      </div>
+    </div>
+    <p>Once your addresses are geocoded into <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">SDO_GEOMETRY</code>, you have two good options for visualisation:</p>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-num">A</div>
+        <div class="flow-text"><strong>Oracle Spatial Studio</strong> — a no-code web tool built into ADB. Drag columns onto a map, run spatial analyses, publish results. No JavaScript needed. Deploy from the OCI Marketplace in minutes. Best for analysts and data exploration.</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">B</div>
+        <div class="flow-text"><strong>Any standard map library</strong> — Leaflet.js, Mapbox GL, OpenLayers, Google Maps. Use <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">SDO_UTIL.TO_GEOJSON()</code> to convert SDO_GEOMETRY to standard GeoJSON. Export via ORDS. Render in any web application. Full control over styling, interactivity, and layout.</div>
+      </div>
+    </div>
+    <p style="margin-top:10px">This demo uses <strong>Leaflet.js with the leaflet-heat plugin</strong> — completely free, no API key, works offline. The heat map intensity is computed directly in Oracle SQL using an analytic window function (<code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">MAX(violation_count) OVER ()</code>) so JavaScript receives pre-normalised 0.0–1.0 values and maps them directly to colours.</p>
+  </div>
+
+  <!-- SECTION 3: ORDS LIVE DATA -->
+  <div class="ai-card" style="border-left:4px solid var(--purple)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--p-lt);border:1px solid #ddd6fe">🔌</div>
+      <div>
+        <div class="ai-card-title">Live Data via ORDS — Built Into Every ADB</div>
+        <div class="ai-card-sub">Auto-REST · No server · No config · CORS automatic</div>
+      </div>
+    </div>
+    <p>Oracle REST Data Services (ORDS) is built into every ADB instance. Five lines of SQL turns any table or view into a live REST endpoint that any browser can fetch — including full CORS support out of the box.</p>
+    <div class="ai-code"><span style="color:#6c7086">-- Enable Auto-REST on a view — creates GET /ords/sdo/violations/</span>
+<span style="color:#cba6f7">BEGIN</span>
+  ORDS.<span style="color:#89b4fa">ENABLE_OBJECT</span>(
+    p_enabled        => <span style="color:#cba6f7">TRUE</span>,
+    p_object         => <span style="color:#a6e3a1">'RESTAURANT_GEOJSON_V'</span>,
+    p_object_type    => <span style="color:#a6e3a1">'VIEW'</span>,
+    p_object_alias   => <span style="color:#a6e3a1">'violations'</span>,
+    p_auto_rest_auth => <span style="color:#cba6f7">FALSE</span>   <span style="color:#6c7086">-- TRUE + OAuth2 for production</span>
+  );
+  <span style="color:#cba6f7">COMMIT</span>;
+<span style="color:#cba6f7">END</span>;
+/
+
+<span style="color:#6c7086">-- Live URL (works in any browser, no CORS issues):
+-- GET https://YOUR-ADB.adb.us-phoenix-1.oraclecloudapps.com/ords/sdo/violations/
+-- Returns: { "items": [ { "restaurant_name": ..., "latitude": ..., ... } ] }</span></div>
+    <p style="margin-top:10px">The <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">p_auto_rest_auth => FALSE</code> flag makes the endpoint public — no login needed. The ORDS response wraps rows in <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">{"items":[...]}</code> and includes full pagination. The HTML file fetches it with a single <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--a-lt);color:var(--accent);padding:1px 4px;border-radius:3px">await fetch(url)</code> call.</p>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-top:10px">
+      <strong style="font-size:12px">🔒 Production: OAuth2 in two steps</strong>
+      <p style="font-size:12px;color:var(--t2);margin:4px 0 0;line-height:1.6">Set <code style="font-family:'JetBrains Mono',monospace;font-size:10px">p_auto_rest_auth => TRUE</code>, then go to <strong>Database Actions → REST → Security → OAuth Clients</strong>. Create a client, issue a <code style="font-family:'JetBrains Mono',monospace;font-size:10px">client_credentials</code> grant, and pass the token as <code style="font-family:'JetBrains Mono',monospace;font-size:10px">Authorization: Bearer &lt;token&gt;</code> in your fetch call. No external identity provider required — Oracle ADB handles it natively.</p>
+    </div>
+  </div>
+
+  <!-- SECTION 4: HOSTING -->
+  <div class="ai-card" style="border-left:4px solid var(--warn)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--w-lt);border:1px solid #fde68a">🚀</div>
+      <div>
+        <div class="ai-card-title">Hosting — From Laptop to Production</div>
+        <div class="ai-card-sub">python -m http.server · Oracle APEX · OCI Object Storage</div>
+      </div>
+    </div>
+    <p>The complete demo is a <strong>single self-contained HTML file</strong>. It embeds all the JavaScript, CSS, and Oracle data. It fetches live data from ORDS. It requires no build step, no npm, no framework. Here are three ways to serve it:</p>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text">
+          <strong>Development — Python HTTP server</strong><br/>
+          <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--code-bg, #1e1e2e);color:#a6e3a1;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:4px">python -m http.server 8502</code><br/>
+          <span style="font-size:11px;color:var(--t2)">Copy the HTML file to a directory, run this command, open http://YOUR_IP:8502/chicago_heatmap.html. No proxy needed — the HTML fetches ORDS directly. This is how this demo runs today.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text">
+          <strong>Production — Oracle APEX (zero extra infrastructure)</strong><br/>
+          <span style="font-size:11px;color:var(--t2)">APEX is built into every ADB. Upload the HTML file as a <strong>Static Application File</strong> (App Builder → Shared Components → Static Files). Create a blank APEX page and embed it via iframe or directly in an HTML region. Since APEX and ORDS run on the same ADB instance, there are no CORS issues at all — perfectly same-origin. Your entire spatial application lives inside Oracle with no external servers.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text">
+          <strong>Scalable — OCI Object Storage static website</strong><br/>
+          <span style="font-size:11px;color:var(--t2)">Upload to a public OCI Object Storage bucket with static website hosting enabled. Optionally add OCI CDN or Cloudflare in front. The HTML file is served as a static asset globally; all dynamic data still comes from ORDS on your ADB.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: THE COMPLETE PICTURE -->
+  <div class="ai-card" style="border-color:#c7d2fe;background:linear-gradient(135deg,#f0f4ff,#faf5ff)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--p-lt);border:1px solid #ddd6fe">✨</div>
+      <div>
+        <div class="ai-card-title">The Complete Picture — What's in This Demo</div>
+        <div class="ai-card-sub">A fully working spatial application — all Oracle, all free, all included with ADB</div>
+      </div>
+    </div>
+    <p>Everything in this demo is running live on Oracle ADB 23ai. The full stack, and the cost of each component:</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">📦 Database Layer</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.8;font-family:'JetBrains Mono',monospace">
+          SDO_GCDR geocoder &nbsp;&nbsp;&nbsp;→ included<br/>
+          MDSYS.SDO_GEOMETRY &nbsp;→ included<br/>
+          SPATIAL_INDEX_V2 &nbsp;&nbsp;→ included<br/>
+          SDO_UTIL.GETVERTICES→ included<br/>
+          SDO_UTIL.TO_GEOJSON →included
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">🌐 API Layer</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.8;font-family:'JetBrains Mono',monospace">
+          ORDS Auto-REST &nbsp;&nbsp;&nbsp;&nbsp;→ included<br/>
+          CORS headers &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ automatic<br/>
+          Pagination &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ automatic<br/>
+          OAuth2 security &nbsp;&nbsp;&nbsp;→ included<br/>
+          JSON output &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ automatic
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">🗺 Map Layer</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.8;font-family:'JetBrains Mono',monospace">
+          Leaflet.js &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ open source<br/>
+          leaflet-heat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ open source<br/>
+          CartoDB tiles &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ free tier<br/>
+          No map API key &nbsp;&nbsp;&nbsp;&nbsp;→ needed
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">🖥 Hosting</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.8;font-family:'JetBrains Mono',monospace">
+          python -m http.server → built-in<br/>
+          Oracle APEX &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ included<br/>
+          OCI Object Storage→ pay per GB<br/>
+          No Node.js &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ needed<br/>
+          No npm &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ needed
+        </div>
+      </div>
+    </div>
+    <div class="hl-box">
+      <div class="hl-box-title">📂 Everything is on GitHub</div>
+      <p>The complete setup SQL and this HTML file are available as a single GitHub repository. Clone, update the ADB hostname, run the SQL script, serve the HTML — fully working spatial heat map in under 15 minutes on any Oracle ADB 23ai instance.</p>
+      <div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#4338ca;background:rgba(255,255,255,.5);padding:8px 10px;border-radius:4px">
+        oracle_spatial_heatmap_complete.sql &nbsp;← complete setup script<br/>
+        chicago_heatmap.html &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← self-contained heat map app
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 6: AI ASSISTANCE -->
+  <div class="ai-card" style="border-left:4px solid var(--green)">
+    <div class="ai-hdr">
+      <div class="ai-icon" style="background:var(--g-lt);border:1px solid #a7f3d0">🤖</div>
+      <div>
+        <div class="ai-card-title">How AI Accelerates This Workflow</div>
+        <div class="ai-card-sub">Claude AI + Oracle SQLcl MCP — built this entire demo in a single conversation</div>
+      </div>
+    </div>
+    <p>This entire demo — the database setup, the geocoding, the ORDS endpoint, the HTML heat map, all three tabs, the SQL reference script — was built through a conversation with Claude AI connected directly to the Oracle ADB via SQLcl MCP. AI ran every SQL statement live, read the results, corrected errors, and iterated until everything worked.</p>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>SQL generation</strong> — describe what you want in plain English, AI writes the spatial SQL, creates the index, sets up ORDS. No documentation lookup.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>Live execution</strong> — AI runs the SQL on your actual database, reads the results, and fixes errors immediately. The geocoding, the view, the ORDS endpoint — all verified live.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>HTML generation</strong> — AI wrote the complete Leaflet heat map application, all CSS, all JavaScript, the tab structure, the tutorial steps, and this blog post — all in one session.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Spatial analysis</strong> — ask AI to interpret the map. It identified the Fulton Market / West Loop cluster (Au Cheval, Green Street, Blackbird — within 300m, 23 combined violations) and explained the inspection risk. Analysis that takes hours, done in seconds.</div></div>
+    </div>
+    <p style="margin-top:10px">The combination of <strong>Oracle ADB 23ai spatial capabilities</strong> + <strong>AI code generation</strong> + <strong>ORDS Auto-REST</strong> means a developer can go from a table of addresses to a fully deployed interactive heat map in a single working session — without reading a single page of documentation.</p>
+  </div>
+
+</div>
+</div></div><!-- /tab-ai -->
+
+<script>
+// ═══ DATA — Oracle ADB 23ai · SDO.RESTAURANT_GEOJSON_V ═══
+// Coordinates from ELOC_GEOCODE_AS_GEOM + GETVERTICES
+const DATA = [
+  {name:"Au Cheval",           addr:"800 W Randolph St",      v:9, lng:-87.64662,  lat:41.88427,  i:1.0000},
+  {name:"Green Street Smoked", addr:"112 N Green St",         v:8, lng:-87.64856,  lat:41.88366,  i:0.8889},
+  {name:"Kumas Corner",        addr:"2900 W Belmont Ave",     v:7, lng:-87.70042,  lat:41.93939,  i:0.7778},
+  {name:"Xoco",                addr:"449 N Clark St",         v:7, lng:-87.631076, lat:41.890289, i:0.7778},
+  {name:"Blackbird",           addr:"619 W Randolph St",      v:6, lng:-87.64362,  lat:41.88442,  i:0.6667},
+  {name:"Giordanos",           addr:"135 E Lake St",          v:5, lng:-87.622978, lat:41.885761, i:0.5556},
+  {name:"Handlebar",           addr:"2311 W North Ave",       v:5, lng:-87.68531,  lat:41.91034,  i:0.5556},
+  {name:"Ann Sathers",         addr:"909 W Belmont Ave",      v:4, lng:-87.65192,  lat:41.93990,  i:0.4444},
+  {name:"Girl and the Goat",   addr:"800 W Randolph St",      v:4, lng:-87.64662,  lat:41.88427,  i:0.4444},
+  {name:"Portillos Hot Dogs",  addr:"100 W Ontario St",       v:3, lng:-87.63141,  lat:41.89323,  i:0.3333},
+  {name:"Dove Tail",           addr:"1545 W Diversey Pkwy",   v:3, lng:-87.66780,  lat:41.93241,  i:0.3333},
+  {name:"Billy Goat Tavern",   addr:"430 N Michigan Ave",     v:3, lng:-87.62468,  lat:41.89053,  i:0.3333},
+  {name:"Nookies",             addr:"1746 N Wells St",        v:2, lng:-87.63480,  lat:41.91427,  i:0.2222},
+  {name:"Lou Malnatis",        addr:"439 N Wells St",         v:2, lng:-87.63402,  lat:41.89034,  i:0.2222},
+  {name:"Publican",            addr:"837 W Fulton Market",    v:2, lng:-87.648831, lat:41.88678,  i:0.2222},
+  {name:"Piece Brewery",       addr:"1927 W North Ave",       v:2, lng:-87.67619,  lat:41.91049,  i:0.2222},
+  {name:"Lula Cafe",           addr:"2537 N Kedzie Blvd",     v:1, lng:-87.70662,  lat:41.92754,  i:0.1111},
+  {name:"Pequods Pizza",       addr:"2207 N Clybourn Ave",    v:1, lng:-87.66459,  lat:41.92175,  i:0.1111},
+  {name:"Avec",                addr:"615 W Randolph St",      v:1, lng:-87.64338,  lat:41.88443,  i:0.1111},
+  {name:"Alinea",              addr:"1723 N Halsted St",      v:0, lng:-87.64835,  lat:41.91342,  i:0.0000}
+];
+
+// Auto-REST URL — same pattern as CDC project (ORDS.ENABLE_OBJECT, no auth)
+// Format: /ords/{schema}/{alias}/  — trailing slash required
+const ORDS_URL = 'https://bk8uwrvkgqzvi2h-vbjson.adb.us-phoenix-1.oraclecloudapps.com/ords/sdo/violations/';
+const CTR   = [41.900, -87.653];
+const TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const ATT   = '© CartoDB | Oracle ADB SDO';
+
+// ═══ TAB SWITCHING ═══
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'tutorial' && !window._tutInit) { window._tutInit = true; setTimeout(initTutMaps, 100); }
+  if (id === 'heatmap') setTimeout(() => mainMap.invalidateSize(), 60);
+}
+
+// ═══ TAB 1 — MAIN MAP ═══
+const mainMap = L.map('map', { center: CTR, zoom: 13, zoomControl: false });
+L.control.zoom({ position: 'topright' }).addTo(mainMap);
+L.tileLayer(TILES, { attribution: ATT, maxZoom: 19 }).addTo(mainMap);
+
+let cur = { r: 35, b: 20, mx: 1.0 };
+
+function makeHeat(r, b, mx) {
+  return L.heatLayer(DATA.map(d => [d.lat, d.lng, d.i]), {
+    radius: r, blur: b, max: mx, maxZoom: 17,
+    gradient: { 0: '#3b82f6', 0.3: '#10b981', 0.65: '#f59e0b', 1: '#ef4444' }
+  });
+}
+let hl = makeHeat(35, 20, 1.0);
+hl.addTo(mainMap);
+
+function rebuildHeat(r, b, mx) {
+  if (r  !== null) { cur.r  = r;  document.getElementById('rv').textContent = r  + 'px'; }
+  if (b  !== null) { cur.b  = b;  document.getElementById('bv').textContent = b  + 'px'; }
+  if (mx !== null) { cur.mx = mx; document.getElementById('mv').textContent = (+mx).toFixed(1); }
+  mainMap.removeLayer(hl);
+  hl = makeHeat(cur.r, cur.b, cur.mx);
+  hl.addTo(mainMap);
+}
+
+// Circle markers
+const mref = {};
+DATA.forEach(d => {
+  const col = d.v === 0 ? '#3b82f6' : d.v <= 2 ? '#059669' : d.v <= 5 ? '#d97706' : d.v <= 7 ? '#ea580c' : '#dc2626';
+  const m = L.circleMarker([d.lat, d.lng], { radius: 5 + d.v * 0.8, fillColor: col, color: '#fff', weight: 1.5, fillOpacity: 0.9 });
+  m.on('click', () => {
+    m.bindPopup(
+      `<div class="pu-name">${d.name}</div>
+       <div class="pu-row"><span class="pu-k">address</span><span class="pu-v" style="font-size:10px">${d.addr}</span></div>
+       <div class="pu-row"><span class="pu-k">violation_count</span><span class="pu-v">${d.v}</span></div>
+       <div class="pu-row"><span class="pu-k">heat_intensity</span><span class="pu-v">${d.i.toFixed(4)}</span></div>
+       <div class="pu-row"><span class="pu-k">geocoder</span><span class="pu-v" style="color:var(--green)">ELOC_GEOCODE_AS_GEOM</span></div>
+       <div class="pu-code">-- SRID 4326 · SDO_POINT_TYPE<br/>(${d.lng}, ${d.lat}, NULL)<br/><br/>GETVERTICES: v.x=${d.lng}<br/>              v.y=${d.lat}<br/>Leaflet: [v.y, v.x]</div>`,
+      { maxWidth: 300 }
+    ).openPopup();
+    showFlash();
+  });
+  m.addTo(mainMap);
+  mref[d.name] = m;
+});
+
+// Sidebar table
+const tbody = document.getElementById('tbl-body');
+DATA.forEach(d => {
+  const cls = d.v === 0 ? 'p0' : d.v <= 2 ? 'p3' : d.v <= 5 ? 'p5' : d.v <= 7 ? 'p7' : 'p9';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${d.name}</td><td><span class="pill ${cls}">${d.v}</span></td>` +
+    `<td style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3)">${d.lat.toFixed(4)}<br/>${d.lng.toFixed(4)}</td>`;
+  tr.addEventListener('click', () => { mainMap.setView([d.lat, d.lng], 15); mref[d.name]?.fire('click'); });
+  tbody.appendChild(tr);
+});
+
+function showFlash() {
+  const f = document.getElementById('qflash');
+  f.classList.add('show');
+  clearTimeout(f._t);
+  f._t = setTimeout(() => f.classList.remove('show'), 3500);
+}
+mainMap.on('click', showFlash);
+
+// ═══ ORDS FETCH — shared helper ═══
+async function ordsGet() {
+  // Auto-REST endpoint — enabled via ORDS.ENABLE_OBJECT (same as CDC project).
+  // No manual DEFINE_MODULE needed. CORS handled automatically by ADB.
+  const res = await fetch(ORDS_URL);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+  const json = await res.json();
+  return json.items || [];   // Auto-REST wraps rows in { "items": [...] }
+}
+
+// Tab 1 fetch button
+async function fetchLive() {
+  const btn = document.getElementById('btn1');
+  const ico = document.getElementById('btn1-ico');
+  const txt = document.getElementById('btn1-txt');
+  const out = document.getElementById('out1');
+  btn.className = 'ords-btn loading'; ico.textContent = '⏳'; txt.textContent = 'Fetching from Oracle ADB...';
+  try {
+    const rows = await ordsGet();
+    btn.className = 'ords-btn ok'; ico.textContent = '✓';
+    txt.textContent = `✓ ${rows.length} rows from Oracle ORDS`;
+
+    // Update stats cards from live data
+    const totalViolations = rows.reduce((s, r) => s + (+r.violation_count), 0);
+    const maxViolations   = Math.max(...rows.map(r => +r.violation_count));
+    const avgViolations   = rows.length ? (totalViolations / rows.length).toFixed(1) : 0;
+    document.getElementById('stat-count').textContent = rows.length;
+    document.getElementById('stat-total').textContent = totalViolations;
+    document.getElementById('stat-avg').textContent   = avgViolations;
+    document.getElementById('stat-max').textContent   = maxViolations;
+    document.getElementById('legend-max').textContent = maxViolations + ' violations';
+
+    // Show data preview
+    out.className = 'ords-out show';
+    const preview = rows.slice(0, 5);
+    const extra   = rows.length > 5 ? `<br/><span style="color:#6c7086">... ${rows.length - 5} more rows</span>` : '';
+    out.innerHTML =
+      `<span style="color:#6c7086">// ${rows.length} rows · map + markers + table all updated</span><br/>` +
+      preview.map(r =>
+        `<span style="color:#89b4fa">${r.restaurant_name}</span> ` +
+        `lat:<span style="color:#a6e3a1">${r.latitude}</span> ` +
+        `lng:<span style="color:#a6e3a1">${r.longitude}</span> ` +
+        `violations:<span style="color:#fab387">${r.violation_count}</span> ` +
+        `intensity:<span style="color:#fab387">${r.heat_intensity}</span>`
+      ).join('<br/>') + extra;
+
+    // 1. Rebuild heat layer
+    mainMap.removeLayer(hl);
+    hl = L.heatLayer(
+      rows.map(r => [+r.latitude, +r.longitude, +r.heat_intensity]),
+      { radius: cur.r, blur: cur.b, max: cur.mx,
+        gradient: { 0: '#3b82f6', 0.3: '#10b981', 0.65: '#f59e0b', 1: '#ef4444' } }
+    );
+    hl.addTo(mainMap);
+
+    // 2. Remove ALL existing circle markers from the map
+    Object.values(mref).forEach(m => mainMap.removeLayer(m));
+    // Clear the mref index
+    Object.keys(mref).forEach(k => delete mref[k]);
+
+    // 3. Re-add circle markers from live data
+    rows.forEach(r => {
+      const v   = +r.violation_count;
+      const col = v === 0 ? '#3b82f6' : v <= 2 ? '#059669' : v <= 5 ? '#d97706' : v <= 7 ? '#ea580c' : '#dc2626';
+      const m   = L.circleMarker([+r.latitude, +r.longitude], {
+        radius: 5 + v * 0.8, fillColor: col, color: '#fff', weight: 1.5, fillOpacity: 0.9
+      });
+      m.on('click', () => {
+        m.bindPopup(
+          `<div class="pu-name">${r.restaurant_name}</div>
+           <div class="pu-row"><span class="pu-k">address</span><span class="pu-v" style="font-size:10px">${r.full_address}</span></div>
+           <div class="pu-row"><span class="pu-k">violation_count</span><span class="pu-v">${v}</span></div>
+           <div class="pu-row"><span class="pu-k">heat_intensity</span><span class="pu-v">${(+r.heat_intensity).toFixed(4)}</span></div>
+           <div class="pu-row"><span class="pu-k">source</span><span class="pu-v" style="color:var(--green)">Live ORDS fetch</span></div>
+           <div class="pu-code">lat: ${r.latitude} (v.y)<br/>lng: ${r.longitude} (v.x)<br/>L.marker([v.y, v.x])</div>`,
+          { maxWidth: 300 }
+        ).openPopup();
+        showFlash();
+      });
+      m.addTo(mainMap);
+      mref[r.restaurant_name] = m;
+    });
+
+    // 4. Rebuild sidebar table from live data
+    const tbody = document.getElementById('tbl-body');
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const v   = +r.violation_count;
+      const cls = v === 0 ? 'p0' : v <= 2 ? 'p3' : v <= 5 ? 'p5' : v <= 7 ? 'p7' : 'p9';
+      const tr  = document.createElement('tr');
+      tr.innerHTML =
+        `<td>${r.restaurant_name}</td>` +
+        `<td><span class="pill ${cls}">${v}</span></td>` +
+        `<td style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3)">` +
+        `${(+r.latitude).toFixed(4)}<br/>${(+r.longitude).toFixed(4)}</td>`;
+      tr.addEventListener('click', () => {
+        mainMap.setView([+r.latitude, +r.longitude], 15);
+        mref[r.restaurant_name]?.fire('click');
+      });
+      tbody.appendChild(tr);
+    });
+
+  } catch (e) {
+    btn.className = 'ords-btn err'; ico.textContent = '✗';
+    txt.textContent = 'Fetch failed — embedded data shown';
+    out.className = 'ords-out show';
+    out.innerHTML =
+      `<span style="color:#f38ba8">${e.message}</span><br/>` +
+      `<span style="color:#6c7086">Check: CORS enabled? Served via HTTP not file://?<br/>` +
+      `Auto-REST ORDS.ENABLE_OBJECT applied ✓<br/>` +
+      `Try opening the ORDS URL directly in browser to test.</span>`;
+  }
+}
+
+// Tab 2 fetch button
+async function fetchTutorial() {
+  const btn = document.getElementById('btn2');
+  const ico = document.getElementById('btn2-ico');
+  const txt = document.getElementById('btn2-txt');
+  const out = document.getElementById('out2');
+  const sta = document.getElementById('out2-status');
+  const dat = document.getElementById('out2-data');
+  btn.className = 'ords-btn loading'; ico.textContent = '⏳'; txt.textContent = 'Connecting to Oracle ADB Phoenix...';
+  try {
+    const rows = await ordsGet();
+    btn.className = 'ords-btn ok'; ico.textContent = '✓'; txt.textContent = `✓ ${rows.length} rows received`;
+    out.style.display = 'block';
+    sta.textContent = `200 OK · ${rows.length} items · application/json`;
+    const sample = rows.slice(0, 3).map(r =>
+      JSON.stringify({ restaurant_name: r.restaurant_name, latitude: r.latitude, longitude: r.longitude, violation_count: r.violation_count, heat_intensity: r.heat_intensity }, null, 2)
+    ).join(',\n');
+    dat.innerHTML =
+      `<span style="color:#cba6f7">{</span>\n  <span style="color:#a6e3a1">"items"</span>: [\n${sample}\n` +
+      `    <span style="color:#6c7086">... ${rows.length - 3} more rows</span>\n  ]\n<span style="color:#cba6f7">}</span>`;
+  } catch (e) {
+    btn.className = 'ords-btn err'; ico.textContent = '✗'; txt.textContent = 'Request failed';
+    out.style.display = 'block';
+    sta.innerHTML = `<span style="color:#f38ba8">${e.message}</span>`;
+    dat.textContent =
+      `Possible causes:\n` +
+      `1. CORS — ORDS.SET_MODULE_ORIGINS_ALLOWED('heatmap','*') ✓ applied\n` +
+      `2. File served as file:// — serve via HTTP instead\n` +
+      `3. Network/VPN blocking OCI Phoenix\n\n` +
+      `Test: open the URL directly in your browser:\n${ORDS_URL}`;
+  }
+}
+
+// ═══ TUTORIAL — fill static tables ═══
+// Coords table (step 3)
+const ct = document.getElementById('coords-tbl');
+DATA.slice(0, 8).forEach(d => {
+  const tr = document.createElement('tr');
+  tr.style.borderBottom = '1px solid var(--border)';
+  tr.innerHTML =
+    `<td style="padding:5px 8px">${d.name}</td>` +
+    `<td style="padding:5px 8px;text-align:right;color:var(--accent)">${d.lng}</td>` +
+    `<td style="padding:5px 8px;text-align:right;color:var(--green)">${d.lat}</td>` +
+    `<td style="padding:5px 8px;text-align:right">${d.v}</td>`;
+  ct.appendChild(tr);
+});
+
+// Intensity table (step 7)
+const it = document.getElementById('intensity-tbl');
+DATA.forEach(d => {
+  const pct = Math.round(d.i * 100);
+  const col = d.i >= 0.75 ? '#dc2626' : d.i >= 0.5 ? '#d97706' : d.i >= 0.25 ? '#059669' : '#2563eb';
+  const tr = document.createElement('tr');
+  tr.style.borderBottom = '1px solid var(--border)';
+  tr.innerHTML =
+    `<td style="padding:5px 8px">${d.name}</td>` +
+    `<td style="padding:5px 8px;text-align:right">${d.v}</td>` +
+    `<td style="padding:5px 8px;text-align:right;color:${col};font-weight:600">${d.i.toFixed(4)}</td>` +
+    `<td style="padding:5px 8px;min-width:70px"><div style="width:${Math.max(pct,2)}%;height:8px;background:${col};border-radius:4px"></div></td>`;
+  it.appendChild(tr);
+});
+
+// ═══ TUTORIAL STEP NAV ═══
+let curStep = 0;
+const TOTAL = 8;
+let tutMapsReady = false;
+
+// Build dots
+const dotsEl = document.getElementById('step-dots');
+for (let i = 0; i < TOTAL; i++) {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.id = 'dot' + i;
+  d.onclick = () => goStep(i);
+  dotsEl.appendChild(d);
+}
+
+function goStep(n) {
+  document.getElementById('tp' + curStep).classList.remove('active');
+  document.querySelectorAll('#snav .step-item')[curStep].classList.remove('active');
+  const od = document.getElementById('dot' + curStep);
+  od.classList.remove('active');
+  if (curStep < n) od.classList.add('done');
+
+  curStep = n;
+
+  document.getElementById('tp' + curStep).classList.add('active');
+  document.querySelectorAll('#snav .step-item')[curStep].classList.add('active');
+  const nd = document.getElementById('dot' + curStep);
+  nd.classList.remove('done');
+  nd.classList.add('active');
+
+  document.getElementById('prev-btn').disabled = curStep === 0;
+  document.getElementById('next-btn').disabled = curStep === TOTAL - 1;
+
+  // Invalidate any visible tutorial maps
+  setTimeout(() => {
+    [window._tm5, window._tm6, window._tm8].forEach(m => { if (m) m.invalidateSize(); });
+  }, 80);
+}
+
+function nextStep() { if (curStep < TOTAL - 1) goStep(curStep + 1); }
+function prevStep() { if (curStep > 0) goStep(curStep - 1); }
+
+// ═══ TUTORIAL MAPS — lazy-init on first tab open ═══
+function initTutMaps() {
+  if (tutMapsReady) return;
+  tutMapsReady = true;
+
+  // Step 5: tiles + no markers
+  window._tm5 = L.map('tm5', { center: CTR, zoom: 13, zoomControl: false, attributionControl: false });
+  L.tileLayer(TILES, { attribution: ATT }).addTo(window._tm5);
+
+  // Step 6: circle markers
+  window._tm6 = L.map('tm6', { center: CTR, zoom: 13, zoomControl: false, attributionControl: false });
+  L.tileLayer(TILES, { attribution: ATT }).addTo(window._tm6);
+  DATA.forEach(d => {
+    const col = d.v >= 7 ? '#dc2626' : d.v >= 5 ? '#d97706' : d.v >= 3 ? '#059669' : '#2563eb';
+    L.circleMarker([d.lat, d.lng], { radius: 4 + d.v * 1.2, fillColor: col, color: 'white', weight: 1.5, fillOpacity: 0.85 })
+      .bindPopup(`<b>${d.name}</b><br/>Violations: ${d.v}<br/><span style="font-family:monospace;font-size:10px">lat=${d.lat} (v.y)<br/>lng=${d.lng} (v.x)</span>`)
+      .addTo(window._tm6);
+  });
+
+  // Step 8: full heat + circles
+  window._tm8 = L.map('tm8', { center: CTR, zoom: 13, zoomControl: false, attributionControl: false });
+  L.tileLayer(TILES, { attribution: ATT }).addTo(window._tm8);
+  L.heatLayer(DATA.map(d => [d.lat, d.lng, d.i]), {
+    radius: 35, blur: 20, max: 1.0,
+    gradient: { 0: '#3b82f6', 0.3: '#10b981', 0.65: '#f59e0b', 1: '#ef4444' }
+  }).addTo(window._tm8);
+  DATA.forEach(d => {
+    const col = d.v >= 7 ? '#dc2626' : d.v >= 5 ? '#d97706' : '#2563eb';
+    L.circleMarker([d.lat, d.lng], { radius: 4 + d.v * 1.1, fillColor: col, color: 'white', weight: 1.5, fillOpacity: 0.85 })
+      .bindPopup(`<b>${d.name}</b><br/>${d.v} violations`)
+      .addTo(window._tm8);
+  });
+}
+</script>
+</body>
+</html>
