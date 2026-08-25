@@ -1,6 +1,12 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
 --  ORACLE SPATIAL HEAT MAP — COMPLETE SETUP SCRIPT
---  Chicago Restaurant Health Violations Demo
+--  Fictional Restaurant "Health Inspection" Demo (Chicago addresses, invented names)
+--
+--  NOTE: restaurant_name values are entirely invented ("The Copper Skillet",
+--  "Smokehouse No. 9", etc.) and violation_count values are synthetic demo
+--  data. Addresses are real Chicago street addresses, used only to produce
+--  realistic, spatially-distributed geocoding results — no address is
+--  claimed to belong to the fictional business named alongside it.
 -- ═══════════════════════════════════════════════════════════════════════════════
 --
 --  Database : Oracle Autonomous Database 23ai (Phoenix)
@@ -118,28 +124,33 @@ CREATE TABLE restaurant_inspections (
 -- │ SECTION 3 — SAMPLE DATA  (21 Chicago restaurants)
 -- └─────────────────────────────────────────────────────────────────────────────
 
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Au Cheval',            '800 W Randolph St',     'Chicago','IL','60661', 9);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Green Street Smoked',  '112 N Green St',        'Chicago','IL','60607', 8);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Kumas Corner',         '2900 W Belmont Ave',    'Chicago','IL','60618', 7);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Xoco',                 '449 N Clark St',        'Chicago','IL','60654', 7);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Blackbird',            '619 W Randolph St',     'Chicago','IL','60661', 6);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Handlebar',            '2311 W North Ave',      'Chicago','IL','60647', 5);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Giordanos',            '135 E Lake St',         'Chicago','IL','60601', 5);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Ann Sathers',          '909 W Belmont Ave',     'Chicago','IL','60657', 4);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Girl and the Goat',    '800 W Randolph St',     'Chicago','IL','60661', 4);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Portillos Hot Dogs',   '100 W Ontario St',      'Chicago','IL','60654', 3);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Dove Tail',            '1545 W Diversey Pkwy',  'Chicago','IL','60614', 3);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Billy Goat Tavern',    '430 N Michigan Ave',    'Chicago','IL','60611', 3);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Piece Brewery',        '1927 W North Ave',      'Chicago','IL','60622', 2);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Lou Malnatis Pizzeria','439 N Wells St',         'Chicago','IL','60654', 2);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Nookies',              '1746 N Wells St',       'Chicago','IL','60614', 2);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Publican',             '837 W Fulton Market',   'Chicago','IL','60607', 2);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Pequods Pizza',        '2207 N Clybourn Ave',   'Chicago','IL','60614', 1);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Avec',                 '615 W Randolph St',     'Chicago','IL','60661', 1);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Lula Cafe',            '2537 N Kedzie Blvd',    'Chicago','IL','60647', 1);
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Alinea',               '1723 N Halsted St',     'Chicago','IL','60614', 0);
+-- Oracle 23ai/26ai table value constructor: one statement, one round trip,
+-- one atomic unit (all 20 rows load, or none do).
+INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count)
+VALUES
+    ('The Copper Skillet',        '800 W Randolph St',     'Chicago','IL','60661', 9),
+    ('Smokehouse No. 9',          '112 N Green St',        'Chicago','IL','60607', 8),
+    ('Corner Kitchen Co.',        '2900 W Belmont Ave',    'Chicago','IL','60618', 7),
+    ('Casa Maiz',                 '449 N Clark St',        'Chicago','IL','60654', 7),
+    ('Raven and Thistle',         '619 W Randolph St',     'Chicago','IL','60661', 6),
+    ('Wells Street Provisions',   '2311 W North Ave',      'Chicago','IL','60647', 5),
+    ('Lakeside Pizza Co.',        '135 E Lake St',         'Chicago','IL','60601', 5),
+    ('Sunnyside Cafe',            '909 W Belmont Ave',     'Chicago','IL','60657', 4),
+    ('Golden Goat Kitchen',       '800 W Randolph St',     'Chicago','IL','60661', 4),
+    ('Windy City Hot Dogs Co.',   '100 W Ontario St',      'Chicago','IL','60654', 3),
+    ('Harborview Table',          '1545 W Diversey Pkwy',  'Chicago','IL','60614', 3),
+    ('The Tin Cup Tavern',        '430 N Michigan Ave',    'Chicago','IL','60611', 3),
+    ('Hopyard Brewing Co.',       '1927 W North Ave',      'Chicago','IL','60622', 2),
+    ('Deep Dish Union',           '439 N Wells St',        'Chicago','IL','60654', 2),
+    ('Nightowl Diner',            '1746 N Wells St',       'Chicago','IL','60614', 2),
+    ('The Public House Kitchen',  '837 W Fulton Market',   'Chicago','IL','60607', 2),
+    ('Northside Pizza Parlor',    '2207 N Clybourn Ave',   'Chicago','IL','60614', 1),
+    ('Table for Two Bistro',      '615 W Randolph St',     'Chicago','IL','60661', 1),
+    ('Blue Awning Cafe',          '2537 N Kedzie Blvd',    'Chicago','IL','60647', 1),
+    ('The Tasting Room',          '1723 N Halsted St',     'Chicago','IL','60614', 0);
+
 -- 21st row added after initial setup to demonstrate live map update:
-INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Wrigleyville Dogs',   '1060 W Addison St',     'Chicago','IL','60613', 12);
+INSERT INTO restaurant_inspections (restaurant_name, address, city, state, zip_code, violation_count) VALUES ('Ballpark Bites',   '1060 W Addison St',     'Chicago','IL','60613', 12);
 COMMIT;
 
 
@@ -395,7 +406,7 @@ ORDER BY total_violations DESC;
 INSERT INTO restaurant_inspections
     (restaurant_name, address, city, state, zip_code, violation_count, location)
 VALUES (
-    'Wrigleyville Dogs',
+    'Ballpark Bites',
     '1060 W Addison St', 'Chicago', 'IL', '60613',
     12,
     SDO_GCDR.ELOC_GEOCODE_AS_GEOM(
